@@ -8,6 +8,8 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+VAD_MODEL_FILENAME = "ggml-silero-v5.1.2.bin"
+
 
 @dataclass(frozen=True, slots=True)
 class Word:
@@ -26,10 +28,13 @@ def transcribe(
     wav_path: Path,
     model_path: Path,
     language: str | None = None,
+    vad: bool = True,
 ) -> Transcription:
     """Run whisper.cpp on a WAV file and return word-level transcription.
 
     `language` is an ISO code like 'es' or 'en'. None means auto-detect.
+    `vad` enables Voice Activity Detection pre-segmentation (recommended
+    — much more accurate timestamps, especially around silence regions).
     """
     with tempfile.TemporaryDirectory(prefix="whisper-subtitles-") as tmp:
         out_prefix = Path(tmp) / "out"
@@ -45,6 +50,15 @@ def transcribe(
             "-np",
             "-of", str(out_prefix),
         ]
+
+        if vad:
+            vad_model = model_path.parent / VAD_MODEL_FILENAME
+            if not vad_model.exists():
+                raise RuntimeError(
+                    f"VAD enabled but model not found at {vad_model}. "
+                    f"Run scripts/setup.sh to download it, or pass --no-vad."
+                )
+            cmd.extend(["--vad", "--vad-model", str(vad_model)])
 
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:

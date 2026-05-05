@@ -8,8 +8,15 @@ set -euo pipefail
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MODELS_DIR="$PROJECT_ROOT/models"
 VENDOR_DIR="$PROJECT_ROOT/vendor"
-HF_BASE_URL="https://huggingface.co/ggerganov/whisper.cpp/resolve/main"
-MODELS=(ggml-large-v3-turbo.bin ggml-large-v3.bin)
+HF_WHISPER_URL="https://huggingface.co/ggerganov/whisper.cpp/resolve/main"
+HF_VAD_URL="https://huggingface.co/ggml-org/whisper-vad/resolve/main"
+
+# Format: filename|base_url
+MODELS=(
+  "ggml-large-v3-turbo.bin|$HF_WHISPER_URL"
+  "ggml-large-v3.bin|$HF_WHISPER_URL"
+  "ggml-silero-v5.1.2.bin|$HF_VAD_URL"
+)
 
 log()  { printf '\033[1;34m[setup]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[warn]\033[0m  %s\n' "$*"; }
@@ -72,14 +79,16 @@ install_linux() {
 
 download_models() {
   mkdir -p "$MODELS_DIR"
-  for model in "${MODELS[@]}"; do
+  for entry in "${MODELS[@]}"; do
+    local model="${entry%%|*}"
+    local base_url="${entry#*|}"
     local target="$MODELS_DIR/$model"
     if [[ -f "$target" ]]; then
       log "$model already present — skipping."
       continue
     fi
     log "Downloading $model..."
-    curl -L --fail -o "$target.tmp" "$HF_BASE_URL/$model"
+    curl -L --fail -o "$target.tmp" "$base_url/$model"
     mv "$target.tmp" "$target"
   done
 }
