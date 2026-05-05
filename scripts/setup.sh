@@ -39,9 +39,11 @@ install_linux() {
   fi
 
   local cmake_args=()
+  local cuda_enabled=false
   if command -v nvcc >/dev/null 2>&1; then
     log "CUDA toolkit detected (nvcc) — building with CUDA support."
     cmake_args+=(-DGGML_CUDA=1)
+    cuda_enabled=true
   elif command -v nvidia-smi >/dev/null 2>&1; then
     warn "NVIDIA GPU detected but CUDA toolkit (nvcc) is missing — building CPU-only."
     warn "To enable GPU acceleration, install CUDA toolkit and re-run this script:"
@@ -50,9 +52,18 @@ install_linux() {
     log "No NVIDIA GPU detected — building CPU-only."
   fi
 
-  log "Building whisper.cpp..."
+  local build_jobs
+  if $cuda_enabled; then
+    build_jobs="${BUILD_JOBS:-4}"
+    log "CUDA build: capping parallel jobs to ${build_jobs} (each nvcc uses ~2GB RAM)."
+    log "Override with: BUILD_JOBS=N ./scripts/setup.sh"
+  else
+    build_jobs="${BUILD_JOBS:-$(nproc)}"
+  fi
+
+  log "Building whisper.cpp (jobs=${build_jobs})..."
   cmake -S "$whisper_dir" -B "$whisper_dir/build" "${cmake_args[@]}"
-  cmake --build "$whisper_dir/build" -j --config Release
+  cmake --build "$whisper_dir/build" -j "$build_jobs" --config Release
 
   mkdir -p "$HOME/.local/bin"
   ln -sf "$whisper_dir/build/bin/whisper-cli" "$HOME/.local/bin/whisper-cli"
