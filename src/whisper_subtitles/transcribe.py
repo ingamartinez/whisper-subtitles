@@ -41,6 +41,7 @@ def transcribe(
             "-ojf",
             "-ml", "1",
             "-sow",
+            "-sns",
             "-np",
             "-of", str(out_prefix),
         ]
