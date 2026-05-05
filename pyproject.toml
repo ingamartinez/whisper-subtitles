@@ -1,0 +1,19 @@
+[project]
+name = "whisper-subtitles"
+version = "0.1.0"
+description = "Generate .srt subtitles from videos using local Whisper (whisper.cpp)."
+readme = "README.md"
+authors = [
+    { name = "Alejandro Martinez", email = "ing.amartinez94@gmail.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "typer>=0.25.1",
+]
+
+[project.scripts]
+whisper-subtitles = "whisper_subtitles.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.9.29,<0.10.0"]
+build-backend = "uv_build"
