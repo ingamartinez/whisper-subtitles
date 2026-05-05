@@ -41,6 +41,11 @@ models/*
 # Built whisper.cpp from source (Linux/Windows path)
 vendor/whisper.cpp/
 
+# Secrets (HF tokens, etc.)
+.env
+.env.*
+!.env.example
+
 # Audio intermediates
 *.wav
 
