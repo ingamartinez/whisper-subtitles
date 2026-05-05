@@ -1,14 +1,20 @@
-"""Transcription layer: WAV -> word-level timestamps via whisper.cpp."""
+"""Transcription layer: audio -> word-level timestamps via WhisperX.
+
+Pipeline:
+  1. faster-whisper (CTranslate2) for transcription.
+  2. wav2vec2 forced alignment for phoneme-level word boundaries.
+
+Step 2 is what gives us frame-accurate timestamps for editing workflows;
+cross-attention timestamps from Whisper alone drift ±100-300ms.
+"""
 
 from __future__ import annotations
 
-import json
-import subprocess
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-VAD_MODEL_FILENAME = "ggml-silero-v5.1.2.bin"
+import torch
+import whisperx
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,61 +31,54 @@ class Transcription:
 
 
 def transcribe(
-    wav_path: Path,
-    model_path: Path,
+    audio_path: Path,
+    model_name: str,
     language: str | None = None,
-    vad: bool = True,
+    batch_size: int = 16,
 ) -> Transcription:
-    """Run whisper.cpp on a WAV file and return word-level transcription.
+    """Transcribe an audio file and return word-level timestamps.
+
+    `model_name` is a faster-whisper model identifier (e.g. 'large-v3',
+    'large-v3-turbo'). Models are auto-downloaded to the HuggingFace cache
+    on first use.
 
     `language` is an ISO code like 'es' or 'en'. None means auto-detect.
-    `vad` enables Voice Activity Detection pre-segmentation (recommended
-    — much more accurate timestamps, especially around silence regions).
     """
-    with tempfile.TemporaryDirectory(prefix="whisper-subtitles-") as tmp:
-        out_prefix = Path(tmp) / "out"
-        cmd = [
-            "whisper-cli",
-            "-m", str(model_path),
-            "-f", str(wav_path),
-            "-l", language or "auto",
-            "-ojf",
-            "-ml", "1",
-            "-sow",
-            "-sns",
-            "-np",
-            "-of", str(out_prefix),
-        ]
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    compute_type = "float16" if device == "cuda" else "int8"
 
-        if vad:
-            vad_model = model_path.parent / VAD_MODEL_FILENAME
-            if not vad_model.exists():
-                raise RuntimeError(
-                    f"VAD enabled but model not found at {vad_model}. "
-                    f"Run scripts/setup.sh to download it, or pass --no-vad."
-                )
-            cmd.extend(["--vad", "--vad-model", str(vad_model)])
+    audio = whisperx.load_audio(str(audio_path))
 
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode != 0:
-            raise RuntimeError(f"whisper-cli failed: {result.stderr.strip()}")
+    asr_model = whisperx.load_model(
+        model_name,
+        device,
+        compute_type=compute_type,
+        language=language,
+    )
+    asr_result = asr_model.transcribe(audio, batch_size=batch_size)
+    detected_language = asr_result.get("language", language or "unknown")
 
-        json_path = out_prefix.with_suffix(".json")
-        data = json.loads(json_path.read_text(encoding="utf-8"))
+    align_model, align_metadata = whisperx.load_align_model(
+        language_code=detected_language,
+        device=device,
+    )
+    aligned = whisperx.align(
+        asr_result["segments"],
+        align_model,
+        align_metadata,
+        audio,
+        device,
+        return_char_alignments=False,
+    )
 
-    detected_language = data.get("result", {}).get("language", language or "unknown")
     words: list[Word] = []
-    for entry in data.get("transcription", []):
-        text = entry.get("text", "").strip()
-        if not text:
-            continue
-        offsets = entry["offsets"]
-        words.append(
-            Word(
-                text=text,
-                start=offsets["from"] / 1000.0,
-                end=offsets["to"] / 1000.0,
-            )
-        )
+    for segment in aligned.get("segments", []):
+        for w in segment.get("words", []):
+            text = (w.get("word") or "").strip()
+            start = w.get("start")
+            end = w.get("end")
+            if not text or start is None or end is None:
+                continue
+            words.append(Word(text=text, start=float(start), end=float(end)))
 
     return Transcription(language=detected_language, words=words)

@@ -38,9 +38,9 @@ class Preset(str, Enum):
     dilan = "dilan"
 
 
-MODEL_FILES = {
-    ModelChoice.turbo: "ggml-large-v3-turbo.bin",
-    ModelChoice.large_v3: "ggml-large-v3.bin",
+MODEL_NAMES = {
+    ModelChoice.turbo: "large-v3-turbo",
+    ModelChoice.large_v3: "large-v3",
 }
 
 
@@ -51,23 +51,17 @@ def transcribe(
     model: ModelChoice = typer.Option(ModelChoice.turbo, "--model", "-m", help="Whisper model to use."),
     language: str | None = typer.Option(None, "--language", "-l", help="ISO language code (es, en, ...). Omit for auto-detect."),
     preset: Preset = typer.Option(Preset.traditional, "--preset", "-p", help="Subtitle style: traditional (default), social (Reels/TikTok), karaoke (word-by-word)."),
-    vad: bool = typer.Option(True, "--vad/--no-vad", help="Enable VAD pre-segmentation for accurate timestamps around silence regions."),
-    models_dir: Path = typer.Option(Path("models"), "--models-dir", help="Directory containing ggml-*.bin model files."),
 ) -> None:
     """Transcribe a video and write an .srt next to it."""
     output_path = output or video.with_suffix(".srt")
-    model_path = models_dir / MODEL_FILES[model]
-
-    if not model_path.exists():
-        typer.echo(f"Model not found at {model_path}. Run scripts/setup.sh first.", err=True)
-        raise typer.Exit(1)
+    model_name = MODEL_NAMES[model]
 
     with tempfile.TemporaryDirectory(prefix="whisper-subtitles-") as tmp:
         typer.echo(f"Extracting audio from {video.name}...")
         wav_path = extract_audio(video, Path(tmp))
 
-        typer.echo(f"Transcribing with model={model.value}, language={language or 'auto'}, vad={'on' if vad else 'off'}...")
-        transcription = run_whisper(wav_path, model_path, language, vad=vad)
+        typer.echo(f"Transcribing with model={model.value}, language={language or 'auto'}...")
+        transcription = run_whisper(wav_path, model_name, language)
 
     typer.echo(f"Detected language: {transcription.language} ({len(transcription.words)} words)")
 
