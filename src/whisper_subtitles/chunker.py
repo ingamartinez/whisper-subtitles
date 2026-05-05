@@ -29,6 +29,7 @@ class ChunkRules:
     gap_threshold_seconds: float = 0.5
     prefer_sentence_breaks: bool = True
     orphan_max_words: int = 0
+    max_words_per_cue: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,6 +82,10 @@ def _absorb_orphans(groups: list[list[Word]], rules: ChunkRules) -> list[list[Wo
         candidate = out[-1] + group
         duration = candidate[-1].end - candidate[0].start
         if duration > rules.max_duration_seconds:
+            out.append(group)
+            continue
+
+        if rules.max_words_per_cue > 0 and len(candidate) > rules.max_words_per_cue:
             out.append(group)
             continue
 
@@ -145,6 +150,8 @@ def _split_at(words: list[Word], punct: tuple[str, ...]) -> list[list[Word]]:
 def _fits_one_cue(words: list[Word], rules: ChunkRules) -> bool:
     if not words:
         return True
+    if rules.max_words_per_cue > 0 and len(words) > rules.max_words_per_cue:
+        return False
     duration = words[-1].end - words[0].start
     if duration > rules.max_duration_seconds:
         return False
@@ -166,6 +173,7 @@ def _greedy_split(words: list[Word], rules: ChunkRules) -> list[list[Word]]:
             gap > rules.gap_threshold_seconds
             or duration > rules.max_duration_seconds
             or _layout_lines(candidate, rules) is None
+            or (rules.max_words_per_cue > 0 and len(candidate) > rules.max_words_per_cue)
         )
 
         if breaks_cue:

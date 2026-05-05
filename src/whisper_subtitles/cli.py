@@ -35,6 +35,7 @@ class Preset(str, Enum):
     traditional = "traditional"
     social = "social"
     karaoke = "karaoke"
+    dilan = "dilan"
 
 
 MODEL_FILES = {

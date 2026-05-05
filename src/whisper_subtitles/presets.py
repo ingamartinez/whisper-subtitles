@@ -33,8 +33,19 @@ KARAOKE = ChunkRules(
     prefer_sentence_breaks=False,
 )
 
+DILAN = ChunkRules(
+    max_chars_per_line=13,
+    max_lines_per_cue=1,
+    max_words_per_cue=3,
+    max_duration_seconds=2.0,
+    min_duration_seconds=0.3,
+    gap_threshold_seconds=0.3,
+    prefer_sentence_breaks=True,
+)
+
 PRESETS: dict[str, ChunkRules] = {
     "traditional": TRADITIONAL,
     "social": SOCIAL,
     "karaoke": KARAOKE,
+    "dilan": DILAN,
 }
